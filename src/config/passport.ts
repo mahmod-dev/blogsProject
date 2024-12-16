@@ -1,4 +1,5 @@
 import passport from "passport";
+import { ExtractJwt, Strategy as JwtStrategy } from "passport-jwt";
 import { Strategy as LocalStrategy } from "passport-local";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { Strategy as GithubStrategy, Profile } from "passport-github2";
@@ -8,13 +9,13 @@ import env from "../env"
 import { VerifyCallback } from "passport-oauth2"
 //import mongoose from "mongoose";
 
-passport.serializeUser((user, cb) => {
-    cb(null, user);
-});
+// passport.serializeUser((user, cb) => {
+//     cb(null, user);
+// });
 
-passport.deserializeUser((user: Express.User, cb) => {
-    cb(null, user);
-});
+// passport.deserializeUser((user: Express.User, cb) => {
+//     cb(null, user);
+// })
 
 // passport.serializeUser((user, cb) => {
 //     cb(null, user._id);
@@ -85,4 +86,21 @@ passport.use(new GithubStrategy({
             cb(error)
         }
     }))
+
+
+passport.use(new JwtStrategy({
+    jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+    secretOrKey: env.JWT_SECRET,
+},
+    async (user: Express.User, cb) => {
+        try {
+            const dbUser = await UserModel.findById(user._id).select("+email")
+          //  console.log("payload " + JSON.stringify(dbUser));
+            cb(null, dbUser)
+        } catch (error) {
+            cb(error)
+        }
+    }))
+
+
 

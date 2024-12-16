@@ -32,6 +32,8 @@
     "typescript-eslint": "^8.15.0"
   },
   "dependencies": {
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/passport-jwt": "^4.0.1",
     "bcrypt": "^5.1.1",
     "connect-mongo": "^5.1.0",
     "connect-redis": "^8.0.1",
@@ -42,12 +44,14 @@
     "express-session": "^1.18.1",
     "http-errors": "^2.0.0",
     "invalid": "^0.0.5",
+    "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.8.2",
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.9.16",
     "passport": "^0.7.0",
     "passport-github2": "^0.1.12",
     "passport-google-oauth20": "^2.0.0",
+    "passport-jwt": "^4.0.1",
     "passport-local": "^1.0.0",
     "redis": "^4.7.0",
     "sharp": "^0.33.5",

@@ -11,6 +11,7 @@ const errorHandler: ErrorRequestHandler = async (error, req, res, next) => {
         console.error(errorMessage)
     }
     res.status(statusCode).json({ error: errorMessage })
+    //  res.status(statusCode).json(error)
 }
 
 export default errorHandler

@@ -1,9 +1,9 @@
 import express from "express"
 import * as blogPostController from "../controller/blogPost"
 import { uploadImage } from "../middlewares/UploadImage"
-import { requireAuth } from "../middlewares/requireAuth"
+import { requireAuthJwt, validateExpirationJWT } from "../middlewares/requireAuth"
 import { createPostSchema, deletePostSchema, getAllBlogPostSchema, updatePostSchema } from "../validation/blogPost"
-import validatRequestSchema from "../middlewares/validatRequestSchema"
+import validatRequestSchema from "../middlewares/validateRequestSchema"
 import { createPostRateLimit, updatePostRateLimit } from "../middlewares/rateLimit"
 
 const router = express.Router()
@@ -12,19 +12,25 @@ router.get("/", validatRequestSchema(getAllBlogPostSchema), blogPostController.g
 router.get("/slugs", blogPostController.getAllSlugs)
 router.get("/post/:slug", blogPostController.getPostBySlug)
 router.post("/",
-    requireAuth,
+    requireAuthJwt,
+    validateExpirationJWT,
     createPostRateLimit,
     uploadImage.single("postImage"),
     validatRequestSchema(createPostSchema),
     blogPostController.createPost
 )
 router.patch("/:postId",
-    requireAuth,
+    requireAuthJwt,
+    validateExpirationJWT,
     updatePostRateLimit,
     uploadImage.single("postImage"),
     validatRequestSchema(updatePostSchema),
     blogPostController.updatePost)
 
-router.delete("/:postId", requireAuth, validatRequestSchema(deletePostSchema), blogPostController.deletePost)
+router.delete("/:postId",
+    requireAuthJwt,
+    validateExpirationJWT,
+    validatRequestSchema(deletePostSchema),
+    blogPostController.deletePost)
 
 export default router

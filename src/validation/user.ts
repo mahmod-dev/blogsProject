@@ -24,6 +24,16 @@ export const signUpSchema = yup.object({
 })
 export type SignupBody = yup.InferType<typeof signUpSchema>["body"]
 
+export const loginSchema = yup.object({
+    body: yup.object(
+        {
+            username: usernameSchema.required(),
+            password: passwordSchema.required(),
+        }
+    ),
+})
+export type LoginBody = yup.InferType<typeof loginSchema>["body"]
+
 
 export const updateUserSchema = yup.object({
     body: yup.object({
@@ -52,4 +62,3 @@ export const resetPasswordSchema = yup.object({
 });
 
 export type ResetPasswordBody = yup.InferType<typeof resetPasswordSchema>["body"];
-

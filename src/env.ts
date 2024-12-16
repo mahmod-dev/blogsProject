@@ -12,6 +12,7 @@ const env = cleanEnv(process.env, {
     GITHUB_CLIENT_SECRET: str(),
     SMTP_PASSWORD: str(),
     NODE_ENV: str(),
+    JWT_SECRET: str(),
 })
 
 export default env

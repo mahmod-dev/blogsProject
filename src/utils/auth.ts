@@ -2,6 +2,7 @@ import mongoose from "mongoose"
 import env from "../env"
 import redisClient from "../config/redisClient"
 
+
 export async function destroyAllActiveSessionsForUser(userId: string) {
     return env.NODE_ENV === "production" ? redisConnection(userId) : mongoConnection(userId)
 }

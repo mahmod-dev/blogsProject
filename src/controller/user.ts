@@ -4,21 +4,23 @@ import EmailVerificationModel from "../models/emailVerification";
 import createHttpError from "http-errors";
 import bcrypt from "bcrypt"
 import assertIsDefined from "../utils/assertIsDefined";
-import { EmailVerificationBody, ResetPasswordBody, SignupBody, UpdateUserBody } from "../validation/user";
+import { EmailVerificationBody, LoginBody, ResetPasswordBody, SignupBody, UpdateUserBody } from "../validation/user";
 import sharp from "sharp";
 import env from "../env";
 import crypto from "crypto";
 import PasswordResetModel from "../models/resetPasswordVerification";
 import * as Email from "../utils/email";
 import { destroyAllActiveSessionsForUser } from "../utils/auth";
-
+import jwt from "jsonwebtoken"
+import { setActivelistToken, getTokenFromHeader } from "../config/jwt";
+import redisClient from "../config/redisClient";
 
 export const getAuthenticatedUser: RequestHandler = async (req, res, next) => {
     const authenticatedUser = req.user
 
     try {
         assertIsDefined(authenticatedUser)
-
+        //activelistToken(authenticatedUser._id, token)
         res.status(200).json(authenticatedUser)
     } catch (error) {
         next(error)
@@ -63,11 +65,12 @@ export const signup: RequestHandler<unknown, unknown, SignupBody, unknown> = asy
         const newUser = result.toObject()
         delete newUser.password
 
-        req.logIn(newUser, error => {
-            if (error) throw error
+        const token = jwt.sign(newUser,
+            env.JWT_SECRET,
+            { expiresIn: "1d" })
 
-            res.status(201).json(newUser)
-        })
+        setActivelistToken(newUser._id, token)
+        res.status(201).json({ newUser, token })
 
     } catch (error) {
         next(error)
@@ -113,7 +116,6 @@ export const requestResetPasswordCode: RequestHandler<unknown, unknown, EmailVer
 
         res.send(200).json("verification code has been sent")
 
-
     } catch (error) {
         next(error)
     }
@@ -123,11 +125,11 @@ export const resetPassword: RequestHandler<unknown, unknown, ResetPasswordBody, 
     try {
         const { email, password: newPasswordRaw, verificationCode } = req.body
 
-        const user = await UserModel.findOne({ email }).select("+email")
+        const existingUser = await UserModel.findOne({ email }).select("+email")
             .collation({ locale: "en", strength: 2 })
             .exec();
 
-        if (!user) {
+        if (!existingUser) {
             throw createHttpError(404, "user not found")
         }
         const passwordRest = await PasswordResetModel.findOne({ email, verificationCode }).exec()
@@ -138,19 +140,17 @@ export const resetPassword: RequestHandler<unknown, unknown, ResetPasswordBody, 
             await passwordRest.deleteOne();
         }
 
-        await destroyAllActiveSessionsForUser(user._id.toString())
+        await destroyAllActiveSessionsForUser(existingUser._id.toString())
 
         const newPasswordHashed = await bcrypt.hash(newPasswordRaw, 10)
-        user.password = newPasswordHashed
-        await user.save()
+        existingUser.password = newPasswordHashed
+        await existingUser.save()
 
-        delete user.toObject().password
+        const user = existingUser.toObject();
 
-        req.logIn(user, error => {
-            if (error) throw error
+        delete user.password;
 
-            res.status(200).json(user)
-        })
+        res.status(200).json(user)
 
     } catch (error) {
         next(error)
@@ -210,9 +210,60 @@ export const getUserByUsername: RequestHandler = async (req, res, next) => {
 }
 
 
-export const logout: RequestHandler = (req, res) => {
-    req.logOut(error => {
-        if (error) throw error
-        res.sendStatus(200)
-    })
+export const logout: RequestHandler = async (req, res, next) => {
+    try {
+        const token = getTokenFromHeader(req)
+
+        let cursor = 0;
+        do {
+            const result = await redisClient.scan(cursor, { MATCH: `[^-]*-${token}`, COUNT: 1000 });
+
+            if (result.keys.length == 0) {
+                throw createHttpError(401, "unathorized")
+            } else {
+                for (const key of result.keys) {
+                    await redisClient.del(key);
+                    res.sendStatus(200)
+                }
+            }
+            cursor = result.cursor;
+        } while (cursor !== 0);
+    } catch (error) {
+        next(error)
+    }
+}
+
+export const login: RequestHandler<unknown, unknown, LoginBody, unknown> = async (req, res, next) => {
+
+    try {
+        const { username, password: rawPassword } = req.body
+        const existingUser = await UserModel.findOne({ username })
+            .select("+email +password")
+            .exec();
+
+        if (!existingUser || !existingUser.password) {
+            throw createHttpError(404, "user not found")
+        }
+
+        const passwordMatch = await bcrypt.compare(rawPassword, existingUser.password);
+
+        if (!passwordMatch) {
+            throw createHttpError(404, "password not matched")
+        }
+
+        const user = existingUser.toObject();
+
+        delete user.password;
+
+        const token = jwt.sign(user,
+            env.JWT_SECRET,
+            { expiresIn: "1d" })
+
+        setActivelistToken(user._id, token)
+        res.status(200).json({ user, token })
+
+    } catch (error) {
+        next(error)
+    }
+
 }
