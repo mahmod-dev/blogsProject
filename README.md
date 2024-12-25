@@ -1,3 +1,9 @@
+## Database
+```
+-Mongoose Mongo DB
+-Sequelize Postgress
+```
+
 ## Authentication:
 ```
 -Username & password
