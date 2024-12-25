@@ -6,13 +6,13 @@ const sequelize = new Sequelize(env.DB_NAME, env.DB_USERNAME, env.DB_PASSWORD, {
     port:env.DB_PORT,
     dialect: 'postgres',
     models: [__dirname + "/models"],
-    pool: {
+   /* pool: {
         max: 100,
         min: 0,
         idle: 200000,
         // @note https://github.com/sequelize/sequelize/issues/8133#issuecomment-359993057
         acquire: 1000000,
-      },
+      },*/
 })
 
 

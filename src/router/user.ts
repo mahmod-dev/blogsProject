@@ -25,9 +25,9 @@ router.get("/oauth2/redirect/github", passport.authenticate("github", {
     keepSessionInfo: true
 }))
 router.post("/signup", validateRequestSchema(signUpSchema), userController.signup)
-// router.post("/verification-code", requesVerificationCodeRateLimit, validateRequestSchema(emailVerificationSchema), userController.requestEmailVerificationCode);
-// router.post("/reset-password-code", requesVerificationCodeRateLimit, validateRequestSchema(emailVerificationSchema), userController.requestResetPasswordCode);
-// router.post("/reset-password", validateRequestSchema(resetPasswordSchema), userController.resetPassword);
+router.post("/verification-code", requesVerificationCodeRateLimit, validateRequestSchema(emailVerificationSchema), userController.requestEmailVerificationCode);
+router.post("/reset-password-code", requesVerificationCodeRateLimit, validateRequestSchema(emailVerificationSchema), userController.requestResetPasswordCode);
+router.post("/reset-password", validateRequestSchema(resetPasswordSchema), userController.resetPassword);
 
 router.get("/me", requireAuthJwt, validateExpirationJWT, userController.getAuthenticatedUser)
 router.patch("/editProfile", requireAuthJwt, validateExpirationJWT, uploadImage.single("profileImage"), validateRequestSchema(updateUserSchema), userController.updateUser)

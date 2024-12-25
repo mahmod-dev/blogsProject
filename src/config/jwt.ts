@@ -4,7 +4,8 @@ import assertIsDefined from "../utils/assertIsDefined";
 
 export async function setActivelistToken(userId: string, token: string) {
     const key = "sess:" + userId + "_" + token
-
+    console.log(key);
+    
     await redisClient.set(key, userId);
 }
 

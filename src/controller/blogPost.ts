@@ -1,5 +1,4 @@
 import { RequestHandler } from "express";
-import blogPost from "../models/blogPost";
 import BlogPostModel from "../database/models/blogPost";
 import assertIsDefined from "../utils/assertIsDefined";
 import env from "../env";
@@ -94,10 +93,7 @@ export const createPost: RequestHandler<unknown, unknown, BlogPostBody, unknown>
             body,
             imgUrl: env.SERVER_URL + imagePath + "?lastupdated=" + Date.now(),
             authorId: author._id
-        },
-            {
-                include: UserModel,
-            })
+        }, { include: UserModel })
         res.status(200).json(newPost)
 
     } catch (error) {
@@ -121,7 +117,7 @@ export const updatePost: RequestHandler<UpdatePostParams, unknown, UpdatePostBod
             throw createHttpError(409, "Slug already taken. Please choose a different one.");
         }
 
-        const postToEdit = await BlogPostModel.findOne({ where: { postId } })
+        const postToEdit = await BlogPostModel.findOne({ where: { _id: postId } })
         if (!postToEdit) {
             throw createHttpError(404);
         }
@@ -137,7 +133,7 @@ export const updatePost: RequestHandler<UpdatePostParams, unknown, UpdatePostBod
                 .toFile("." + imagePath)
         }
 
-        const updatedPost = await BlogPostModel.update(
+        const [rowCount, updatedPost] = await BlogPostModel.update(
             {
                 ...(slug && { slug }),
                 ...(title && { title }),
@@ -145,18 +141,13 @@ export const updatePost: RequestHandler<UpdatePostParams, unknown, UpdatePostBod
                 ...(summary && { summary }),
                 ...(postImage && { imgUrl: env.SERVER_URL + imagePath + "?lastupdated=" + Date.now() }),
             },
-            { where: { _id: postId, }, returning: true },
+            {
+                where: { _id: postId, },
+                returning: true
+            },
         )
 
-        /*           // this way will only work when send all fields and we should update all fields
-                   postToEdit.slug = slug;
-                   postToEdit.title = title;
-                   postToEdit.summary = summary;
-                   postToEdit.body = body;
-                   await postToEdit.save();*/
-
-        res.status(200).json(updatedPost)
-
+        res.status(200).json(updatedPost[0])
 
     } catch (error) {
         next(error)

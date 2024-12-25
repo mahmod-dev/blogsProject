@@ -1,8 +1,6 @@
-export { }
 import { RequestHandler } from "express";
-//import UserModel from "../models/user";
 import UserModel, { User } from "../database/models/user";
-import EmailVerificationModel from "../models/emailVerification";
+import EmailVerificationModel from "../database/models/emailVerification";
 import createHttpError from "http-errors";
 import bcrypt from "bcrypt"
 import assertIsDefined from "../utils/assertIsDefined";
@@ -10,34 +8,27 @@ import { EmailVerificationBody, LoginBody, ResetPasswordBody, SignupBody, Update
 import sharp from "sharp";
 import env from "../env";
 import crypto from "crypto";
-import PasswordResetModel from "../models/resetPasswordVerification";
 import * as Email from "../utils/email";
 import { destroyAllActiveSessionsForUser } from "../utils/auth";
 import jwt from "jsonwebtoken"
 import { setActivelistToken, getTokenFromHeader } from "../config/jwt";
 import redisClient from "../config/redisClient";
-import { where } from "sequelize";
 
 export const getAuthenticatedUser: RequestHandler = async (req, res, next) => {
     const authenticatedUser = req.user
 
     try {
         assertIsDefined(authenticatedUser)
-        //activelistToken(authenticatedUser._id, token)
         res.status(200).json(authenticatedUser)
     } catch (error) {
         next(error)
     }
-
 }
-
 
 export const signup: RequestHandler<unknown, unknown, SignupBody, unknown> = async (req, res, next) => {
     try {
         const { username, email, password: rawPassword, verificationCode } = req.body
         const existingUsername = await UserModel.findOne({ where: { username } })
-        // .collation({ locale: "en", strength: 2 })// to compare without casing ("Ali","ali")
-        //.exec()
         const existingEmail = await UserModel.findOne({ where: { email } })
         if (existingUsername) {
             throw createHttpError(409, "username already exists")
@@ -49,29 +40,24 @@ export const signup: RequestHandler<unknown, unknown, SignupBody, unknown> = asy
             throw createHttpError(409, "too short password")
         }
 
-        /*  const emailVerificationToken = await EmailVerificationModel.findOne({ email, verificationCode }).exec();
-  
-          if (!emailVerificationToken) {
-              throw createHttpError(400, "Verification code incorrect or expired.");
-          } else {
-              await emailVerificationToken.deleteOne();
-          }*/
+        const emailVerificationToken = await EmailVerificationModel.findOne({ where: { email, verificationCode, emailType: 1 } })
+
+        if (!emailVerificationToken) {
+            throw createHttpError(400, "Verification code incorrect or expired.");
+        } else {
+            await emailVerificationToken.destroy();
+        }
 
         const hashedPassword = await bcrypt.hash(rawPassword, 10)
 
-        const result = await UserModel.create({
+        const newUser = await UserModel.create({
             username,
             displayName: username,
             email,
             password: hashedPassword
         })
 
-        const newUser = result.toJSON<User>()
-        delete newUser.password
-        delete newUser.githubId
-        delete newUser.googleId
-        delete newUser.email
-        const token = jwt.sign(newUser,
+        const token = jwt.sign(newUser.toJSON(),
             env.JWT_SECRET,
             { expiresIn: "1d" })
 
@@ -83,85 +69,85 @@ export const signup: RequestHandler<unknown, unknown, SignupBody, unknown> = asy
     }
 }
 
-// export const requestEmailVerificationCode: RequestHandler<unknown, unknown, EmailVerificationBody, unknown> = async (req, res, next) => {
-//     try {
-//         const { email } = req.body
-//         const existingEmail = await UserModel.findOne({ email })
-//             .collation({ locale: "en", strength: 2 })
-//             .exec();
-//         if (existingEmail) {
-//             throw createHttpError(409, "A user with this email address already exists. Please log in instead.");
-//         }
-//         const verificationCode = crypto.randomInt(100000, 999999).toString();
+export const requestEmailVerificationCode: RequestHandler<unknown, unknown, EmailVerificationBody, unknown> = async (req, res, next) => {
+    try {
+        const { email } = req.body
+        const existingEmail = await UserModel.findOne({ where: { email } })
 
-//         await EmailVerificationModel.create({ email, verificationCode })
-//         await Email.sendVerificationCode(email, verificationCode);
+        if (existingEmail) {
+            throw createHttpError(409, "A user with this email address already exists. Please log in instead.");
+        }
+        const verificationCode = crypto.randomInt(100000, 999999).toString();
 
-//         res.sendStatus(200);
-//     } catch (error) {
-//         next(error)
-//     }
-// }
+        await EmailVerificationModel.create({ email, verificationCode })
+        await Email.sendVerificationCode(email, verificationCode);
 
-// export const requestResetPasswordCode: RequestHandler<unknown, unknown, EmailVerificationBody, unknown> = async (req, res, next) => {
-//     try {
-//         const { email } = req.body;
+        res.sendStatus(200);
+    } catch (error) {
+        next(error)
+    }
+}
 
-//         const user = await UserModel.findOne({ email })
-//             .collation({ locale: "en", strength: 2 })
-//             .exec();
+export const requestResetPasswordCode: RequestHandler<unknown, unknown, EmailVerificationBody, unknown> = async (req, res, next) => {
+    try {
+        const { email } = req.body;
 
-//         if (!user) {
-//             throw createHttpError(404, "A user with this email doesn't exist. Please sign up instead.");
-//         }
+        const user = await UserModel.findOne({ where: { email } })
 
-//         const verificationCode = crypto.randomInt(100000, 999999).toString();
-//         await PasswordResetModel.create({ email, verificationCode });
 
-//         await Email.sendPasswordResetCode(email, verificationCode)
+        if (!user) {
+            throw createHttpError(404, "A user with this email doesn't exist. Please sign up instead.");
+        }
 
-//         res.send(200).json("verification code has been sent")
+        const verificationCode = crypto.randomInt(100000, 999999).toString();
+        await EmailVerificationModel.create({ email, verificationCode, emailType: 2 });
 
-//     } catch (error) {
-//         next(error)
-//     }
-// }
+        await Email.sendPasswordResetCode(email, verificationCode)
 
-// export const resetPassword: RequestHandler<unknown, unknown, ResetPasswordBody, unknown> = async (req, res, next) => {
-//     try {
-//         const { email, password: newPasswordRaw, verificationCode } = req.body
+        res.send(200).json("verification code has been sent")
 
-//         const existingUser = await UserModel.findOne({ email }).select("+email")
-//             .collation({ locale: "en", strength: 2 })
-//             .exec();
+    } catch (error) {
+        next(error)
+    }
+}
 
-//         if (!existingUser) {
-//             throw createHttpError(404, "user not found")
-//         }
-//         const passwordRest = await PasswordResetModel.findOne({ email, verificationCode }).exec()
+export const resetPassword: RequestHandler<unknown, unknown, ResetPasswordBody, unknown> = async (req, res, next) => {
+    try {
+        const { email, password: newPasswordRaw, verificationCode } = req.body
 
-//         if (!passwordRest) {
-//             throw createHttpError(400, "Verification code incorrect or expired.");
-//         } else {
-//             await passwordRest.deleteOne();
-//         }
+        const existingUser = await UserModel.unscoped().findOne({ where: { email } })
 
-//         await destroyAllActiveSessionsForUser(existingUser._id.toString())
 
-//         const newPasswordHashed = await bcrypt.hash(newPasswordRaw, 10)
-//         existingUser.password = newPasswordHashed
-//         await existingUser.save()
+        if (!existingUser) {
+            throw createHttpError(404, "user not found")
+        }
+        const passwordRest = await EmailVerificationModel.findOne({
+            where: { email, verificationCode, emailType: 2 }
+        })
 
-//         const user = existingUser.toObject();
 
-//         delete user.password;
+        if (!passwordRest) {
+            throw createHttpError(400, "Verification code incorrect or expired.");
+        } else {
+            await passwordRest.destroy();
+        }
 
-//         res.status(200).json(user)
+        await destroyAllActiveSessionsForUser(existingUser._id.toString())
 
-//     } catch (error) {
-//         next(error)
-//     }
-// }
+        const newPasswordHashed = await bcrypt.hash(newPasswordRaw, 10)
+        existingUser.password = newPasswordHashed
+        await existingUser.save()
+
+        const user = existingUser.toJSON<User>()
+
+        delete user.password;
+
+        res.status(200).json(user)
+
+    } catch (error) {
+        next(error)
+    }
+}
 
 export const updateUser: RequestHandler<unknown, unknown, UpdateUserBody, unknown> = async (req, res, next) => {
     try {
@@ -189,6 +175,7 @@ export const updateUser: RequestHandler<unknown, unknown, UpdateUserBody, unknow
                 .toFile("." + imagePath)
         }
 
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const [rowCount, updatedUser] = await UserModel.update(
             {
                 ...(username && { username }),
@@ -201,7 +188,7 @@ export const updateUser: RequestHandler<unknown, unknown, UpdateUserBody, unknow
                 returning: true
             })
 
-        res.status(200).json(updatedUser)
+        res.status(200).json(updatedUser[0])
 
     } catch (error) {
         next(error)

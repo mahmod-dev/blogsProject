@@ -1,9 +1,14 @@
-import { BelongsTo, Column, DataType, DefaultScope, ForeignKey, Model, Table } from "sequelize-typescript";
+import { BelongsTo, Column, DataType, DefaultScope, ForeignKey, HasMany, Model, Scopes, Table } from "sequelize-typescript";
 import UserModel from "./user";
+import CommentModel from "./comment";
 
 
 @DefaultScope(() => ({
-    include: [{ model: UserModel}],
+    include: [UserModel],
+
+}))
+@Scopes(() => ({
+    withComment: { include: [CommentModel] }
 
 }))
 @Table({
@@ -57,6 +62,9 @@ class BlogPostModel extends Model {
 
     @BelongsTo(() => UserModel)
     declare user: UserModel
+
+    @HasMany(() => CommentModel)
+    declare comments: CommentModel[];
 
 }
 

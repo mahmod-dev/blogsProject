@@ -1,38 +1,32 @@
 import { RequestHandler } from "express";
 import { CreateCommentBody, CreateCommentParams, DeleteCommentParams, GetCommentRepliesParams, GetCommentsParams, GetCommentsQuery, UpdateCommentBody, UpdateCommentParams } from "../validation/comment";
-import CommentModel from "../models/comment";
+import CommentModel from "../database/models/comment";
 import assertIsDefined from "../utils/assertIsDefined";
 import createHttpError from "http-errors";
+import { Op } from "sequelize";
+import UserModel from "../database/models/user";
 
 export const getCommentsForPosts: RequestHandler<GetCommentsParams, unknown, unknown, GetCommentsQuery> = async (req, res, next) => {
     try {
         const { blogPostId } = req.params
         const { continueAfterId } = req.query
         const pageSize = 50
-        const query = CommentModel
-            .find({ blogPostId, parentCommentId: undefined })
-            .sort({ _id: -1 })
 
-        if (continueAfterId) {
-            query.lt("_id", continueAfterId)
-        }
-        const result = await query
-            .limit(pageSize + 1)
-            .populate("author")
-            .exec()
+        const result = await CommentModel
+            .findAll({
+                where: {
+                    ...(continueAfterId && { _id: { [Op.lt]: continueAfterId } }),
+                    blogPostId, parentCommentId: null
+                },
+                order: [['_id', 'DESC']], // Sort by id descending
+                limit: pageSize + 1,
 
+            })
         const comments = result.slice(0, pageSize)
         const endOfPaginationReach = result.length <= pageSize
 
-        const commentsWithRepliesCount = await Promise.all(
-            comments.map(async comment => {
-                const repliesCount = await CommentModel.countDocuments({ parentCommentId: comment._id })
-                return { ...comment.toObject(), repliesCount } // to add count into comment object
-            })
-        )
-
         res.status(200).json({
-            comments: commentsWithRepliesCount,
+            comments,
             endOfPaginationReach
         })
 
@@ -45,15 +39,16 @@ export const getCommentReplies: RequestHandler<GetCommentRepliesParams, unknown,
     try {
         const { commentId: parentCommentId } = req.params
         const { continueAfterId } = req.query
-        const query = CommentModel.find({ parentCommentId })
-        const pageSize = 10
-        if (continueAfterId) {
-            query.gt("_id", continueAfterId)
-        }
-        const result = await query
-            .limit(pageSize + 1)
-            .populate("author")
-            .exec()
+        const pageSize = 50
+
+        const result = await CommentModel.findAll({
+            where: {
+                parentCommentId,
+                ...(continueAfterId && { _id: { [Op.gt]: continueAfterId } }),
+            },
+            order: [['_id', 'ASC']],
+            limit: pageSize + 1,
+        })
 
         const replies = result.slice(0, pageSize)
         const endOfPaginationReach = result.length <= pageSize
@@ -78,10 +73,12 @@ export const createComment: RequestHandler<CreateCommentParams, unknown, CreateC
             blogPostId,
             text,
             parentCommentId,
-            author: userId,
+            authorId: userId,
         })
 
-        await CommentModel.populate(newComment, { path: "author" })
+        await newComment.reload({
+            include: [UserModel]
+        })
 
         res.status(201).json(newComment)
     } catch (error) {
@@ -97,11 +94,11 @@ export const updateComment: RequestHandler<UpdateCommentParams, unknown, UpdateC
 
         assertIsDefined(userId)
 
-        const commentToUpdate = await CommentModel.findById(commentId).exec()
+        const commentToUpdate = await CommentModel.findByPk(commentId)
         if (!commentToUpdate) {
             throw createHttpError(404, "comment not found")
         }
-        if (!commentToUpdate.author.equals(userId)) {
+        if (commentToUpdate.authorId !== userId) {
             throw createHttpError(401, "unathuorized")
         }
 
@@ -117,23 +114,25 @@ export const updateComment: RequestHandler<UpdateCommentParams, unknown, UpdateC
 
 export const deleteComment: RequestHandler<DeleteCommentParams, unknown, unknown, unknown> = async (req, res, next) => {
     try {
+
         const { commentId } = req.params
         const userId = req.user?._id
 
         assertIsDefined(userId)
 
-        const commentToDelete = await CommentModel.findById(commentId).exec()
+        const commentToDelete = await CommentModel.findByPk(commentId)
+
         if (!commentToDelete) {
             throw createHttpError(404, "comment not found")
         }
-        if (!commentToDelete.author.equals(userId)) {
+        if (commentToDelete.authorId !== userId) {
             throw createHttpError(401, "unathuorized")
         }
 
-        await commentToDelete.deleteOne()
-        await CommentModel.deleteMany({parentCommentId: commentId}).exec()
+        await commentToDelete.destroy()
+        await CommentModel.destroy({ where: { parentCommentId: commentId } })
 
-        res.status(200)
+        res.sendStatus(200)
 
     } catch (error) {
         next(error)
