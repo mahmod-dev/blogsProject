@@ -10,11 +10,6 @@ import { loginRateLimit, requesVerificationCodeRateLimit } from "../middlewares/
 import { requireAuthJwt, validateExpirationJWT } from "../middlewares/requireAuth";
 
 const router = express.Router()
-// login using session
-/*router.post('/login', loginRateLimit, passport.authenticate('local'),
-    function (req, res) {
-        res.status(200).json(req.user)
-    });*/
 
 router.post('/login', loginRateLimit, validateRequestSchema(loginSchema), userController.login);
 
@@ -30,9 +25,9 @@ router.get("/oauth2/redirect/github", passport.authenticate("github", {
     keepSessionInfo: true
 }))
 router.post("/signup", validateRequestSchema(signUpSchema), userController.signup)
-router.post("/verification-code", requesVerificationCodeRateLimit, validateRequestSchema(emailVerificationSchema), userController.requestEmailVerificationCode);
-router.post("/reset-password-code", requesVerificationCodeRateLimit, validateRequestSchema(emailVerificationSchema), userController.requestResetPasswordCode);
-router.post("/reset-password", validateRequestSchema(resetPasswordSchema), userController.resetPassword);
+// router.post("/verification-code", requesVerificationCodeRateLimit, validateRequestSchema(emailVerificationSchema), userController.requestEmailVerificationCode);
+// router.post("/reset-password-code", requesVerificationCodeRateLimit, validateRequestSchema(emailVerificationSchema), userController.requestResetPasswordCode);
+// router.post("/reset-password", validateRequestSchema(resetPasswordSchema), userController.resetPassword);
 
 router.get("/me", requireAuthJwt, validateExpirationJWT, userController.getAuthenticatedUser)
 router.patch("/editProfile", requireAuthJwt, validateExpirationJWT, uploadImage.single("profileImage"), validateRequestSchema(updateUserSchema), userController.updateUser)

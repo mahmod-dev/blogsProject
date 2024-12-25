@@ -1,6 +1,8 @@
 import mongoose from "mongoose";
+import { DataType, isDataType, Sequelize } from "sequelize-typescript";
 import { validateBufferMIMEType } from "validate-image-type";
 import * as yup from "yup";
+import { validate as uuidValidate, version as uuidVersion } from 'uuid';
 
 export const imageFileSchema = yup.mixed<Express.Multer.File>()
     .test(
@@ -20,6 +22,9 @@ export const imageFileSchema = yup.mixed<Express.Multer.File>()
 export const objectIdSchema = yup.string().test(
     "is-object-id",
     "${path} is not a valid ObjectId",
-    value => !value || mongoose.Types.ObjectId.isValid(value)
-
+    value => !value || uuidValidate(value) && uuidVersion(value) === 4
 )
+
+
+
+

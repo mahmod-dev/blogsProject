@@ -35,9 +35,11 @@ export const requireAuthJwt: RequestHandler = (req, res, next) => {
 export const validateExpirationJWT: RequestHandler = async (req, res, next) => {
     try {
         const token = getTokenFromHeader(req)
+
         let cursor = 0;
         do {
-            const result = await redisClient.scan(cursor, { MATCH: `[^-]*-${token}`, COUNT: 1000 });
+            const result = await redisClient.scan(cursor, { MATCH: `[^-]*_${token}`, COUNT: 1000 });
+
             if (result.keys.length > 0) {
                 next()
             } else {

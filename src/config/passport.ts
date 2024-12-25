@@ -3,7 +3,7 @@ import { ExtractJwt, Strategy as JwtStrategy } from "passport-jwt";
 import { Strategy as LocalStrategy } from "passport-local";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { Strategy as GithubStrategy, Profile } from "passport-github2";
-import UserModel from "../models/user"
+import UserModel, { User } from "../database/models/user"
 import bcrypt from "bcrypt"
 import env from "../env"
 import { VerifyCallback } from "passport-oauth2"
@@ -28,9 +28,8 @@ import { VerifyCallback } from "passport-oauth2"
 
 passport.use(new LocalStrategy(async (username, password, cb) => {
     try {
-        const existingUser = await UserModel.findOne({ username })
-            .select("+email +password")
-            .exec();
+        const existingUser = await UserModel.unscoped().findOne({ where: { username } })
+
 
         if (!existingUser || !existingUser.password) {
             return cb(null, false);
@@ -42,7 +41,7 @@ passport.use(new LocalStrategy(async (username, password, cb) => {
             return cb(null, false);
         }
 
-        const user = existingUser.toObject();
+        const user = existingUser.toJSON<User>()
 
         delete user.password;
 
@@ -59,7 +58,7 @@ passport.use(new GoogleStrategy({
     scope: ["profile"]
 }, async (accessToken, refreshToken, profile, cb) => {
     try {
-        let user = await UserModel.findOne({ googleId: profile.id }).exec()
+        let user = await UserModel.unscoped().findOne({ where: { googleId: profile.id } })
         if (!user) {
             user = await UserModel.create({ googleId: profile.id })
         }
@@ -77,7 +76,7 @@ passport.use(new GithubStrategy({
 },
     async (accessToken: string, refreshToken: string, profile: Profile, cb: VerifyCallback) => {
         try {
-            let user = await UserModel.findOne({ githubId: profile.id }).exec()
+            let user = await UserModel.unscoped().findOne({ where: { githubId: profile.id } })
             if (!user) {
                 user = await UserModel.create({ githubId: profile.id })
             }
@@ -94,8 +93,8 @@ passport.use(new JwtStrategy({
 },
     async (user: Express.User, cb) => {
         try {
-            const dbUser = await UserModel.findById(user._id).select("+email")
-          //  console.log("payload " + JSON.stringify(dbUser));
+            const dbUser = await UserModel.findOne({ where: { _id: user._id } })
+            //  console.log("payload " + JSON.stringify(dbUser));
             cb(null, dbUser)
         } catch (error) {
             cb(error)

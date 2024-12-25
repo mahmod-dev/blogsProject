@@ -1,29 +1,29 @@
 import { RequestHandler } from "express";
 import blogPost from "../models/blogPost";
+import BlogPostModel from "../database/models/blogPost";
 import assertIsDefined from "../utils/assertIsDefined";
-import mongoose from "mongoose";
 import env from "../env";
 import sharp from "sharp";
 import createHttpError from "http-errors";
 import { BlogPostQuery, DeletePostParams, UpdatePostBody, UpdatePostParams } from "../validation/blogPost";
 import fs from "fs"
+import UserModel from "../database/models/user";
+import { v4 as uuidv4 } from "uuid"
 
 export const getAllBlogPost: RequestHandler<unknown, unknown, unknown, BlogPostQuery> = async (req, res, next) => {
     try {
         const authorId = req.query.authorId
-        const filter = authorId ? { author: authorId } : {} //episode 23 
+        const filter = authorId ? { authorId } : {} //episode 23 
         const page = parseInt((req.query.page || "1"))
         const pageSize = 50
 
-        const allPostsQuery = blogPost
-            .find(filter)
-            .sort({ _id: -1 }) // to sort from newest to oldest
-            .skip((page - 1) * pageSize)
-            .limit(pageSize)
-            .populate("author") // to fetch author object inside blogs object
-            .exec()
+        const allPostsQuery = BlogPostModel.findAll({
+            limit: pageSize,
+            offset: (page - 1) * pageSize,
 
-        const countDocumentQuery = blogPost.countDocuments(filter).exec()
+        })
+
+        const countDocumentQuery = BlogPostModel.count({ where: filter })
         const [allPosts, totalResult] = await Promise.all([allPostsQuery, countDocumentQuery])
         const totalPages = Math.ceil(totalResult / pageSize)
         res.status(200).json({
@@ -34,20 +34,13 @@ export const getAllBlogPost: RequestHandler<unknown, unknown, unknown, BlogPostQ
 
     } catch (error) {
         next(error)
-        /**
-         *  res.status(500).json({ error })
-         * {
-         *      error: msg of error 
-         * }
-         */
     }
 }
 
 export const getAllSlugs: RequestHandler = async (req, res, next) => {
     try {
-        const blogsSlugs = await blogPost.find().select("slug").exec()
+        const blogsSlugs = await BlogPostModel.unscoped().findAll({ attributes: ["slug"] });
         const slugs = blogsSlugs.map(post => post.slug)
-        //  console.log("session: "+window.sessionStorage)
 
         res.status(200).json(slugs)
 
@@ -59,7 +52,7 @@ export const getAllSlugs: RequestHandler = async (req, res, next) => {
 export const getPostBySlug: RequestHandler = async (req, res, next) => {
     try {
         const slug = req.params.slug
-        const postBySlug = await blogPost.findOne({ slug: slug }).exec()
+        const postBySlug = await BlogPostModel.findOne({ where: { slug } })
         if (!postBySlug) {
             throw createHttpError(400, "No blog post found for this slug");
         }
@@ -84,22 +77,27 @@ export const createPost: RequestHandler<unknown, unknown, BlogPostBody, unknown>
         const author = req.user
         assertIsDefined(image)
         assertIsDefined(author)
-        const postId = new mongoose.Types.ObjectId()
+        const postId = uuidv4()
+        console.log("postId: " + postId)
+
         const imagePath = "/uploads/post-images/" + postId + ".png"
 
         await sharp(image.buffer)
             .resize(700, 450)
             .toFile("." + imagePath)
-        console.log("title: " + title)
-        const newPost = await blogPost.create({
+
+        const newPost = await BlogPostModel.create({
             _id: postId,
             slug,
             title,
             summary,
             body,
             imgUrl: env.SERVER_URL + imagePath + "?lastupdated=" + Date.now(),
-            author: author._id
-        })
+            authorId: author._id
+        },
+            {
+                include: UserModel,
+            })
         res.status(200).json(newPost)
 
     } catch (error) {
@@ -117,17 +115,17 @@ export const updatePost: RequestHandler<UpdatePostParams, unknown, UpdatePostBod
         assertIsDefined(authenticatedUser)
         let imagePath: string | undefined
 
-        const existingSlug = await blogPost.findOne({ slug }).exec()
+        const existingSlug = await BlogPostModel.findOne({ where: { slug } })
 
         if (existingSlug) {
             throw createHttpError(409, "Slug already taken. Please choose a different one.");
         }
 
-        const postToEdit = await blogPost.findById(postId).exec()
+        const postToEdit = await BlogPostModel.findOne({ where: { postId } })
         if (!postToEdit) {
             throw createHttpError(404);
         }
-        if (!postToEdit.author.equals(authenticatedUser._id)) {
+        if (postToEdit.authorId !== authenticatedUser._id) {
             throw createHttpError(401);
         }
 
@@ -139,17 +137,16 @@ export const updatePost: RequestHandler<UpdatePostParams, unknown, UpdatePostBod
                 .toFile("." + imagePath)
         }
 
-        const updatedPost = await blogPost.findByIdAndUpdate(postId,
+        const updatedPost = await BlogPostModel.update(
             {
-                $set: {
-                    ...(slug && { slug }),
-                    ...(title && { title }),
-                    ...(body && { body }),
-                    ...(summary && { summary }),
-                    ...(postImage && { imgUrl: env.SERVER_URL + imagePath + "?lastupdated=" + Date.now() }),
-                }
+                ...(slug && { slug }),
+                ...(title && { title }),
+                ...(body && { body }),
+                ...(summary && { summary }),
+                ...(postImage && { imgUrl: env.SERVER_URL + imagePath + "?lastupdated=" + Date.now() }),
             },
-            { new: true }).exec()
+            { where: { _id: postId, }, returning: true },
+        )
 
         /*           // this way will only work when send all fields and we should update all fields
                    postToEdit.slug = slug;
@@ -173,11 +170,11 @@ export const deletePost: RequestHandler<DeletePostParams, unknown, unknown, unkn
         assertIsDefined(postId)
         assertIsDefined(authenticatedUserId)
 
-        const postToDelete = await blogPost.findById(postId).exec()
+        const postToDelete = await BlogPostModel.findByPk(postId)
         if (!postToDelete) {
             throw createHttpError(404)
         }
-        if (!postToDelete.author.equals(authenticatedUserId)) {
+        if (postToDelete.authorId !== authenticatedUserId) {
             throw createHttpError(401)
         }
         if (postToDelete.imgUrl.startsWith(env.SERVER_URL)) {
@@ -186,7 +183,7 @@ export const deletePost: RequestHandler<DeletePostParams, unknown, unknown, unkn
             fs.unlinkSync("." + imgPathToDelete)
         }
 
-        await postToDelete.deleteOne()
+        await postToDelete.destroy()
         res.status(200).json({ "message": "success deleted" })
 
     } catch (error) {

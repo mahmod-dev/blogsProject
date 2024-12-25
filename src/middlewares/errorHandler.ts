@@ -10,8 +10,8 @@ const errorHandler: ErrorRequestHandler = async (error, req, res, next) => {
         errorMessage = error.message
         console.error(errorMessage)
     }
-    res.status(statusCode).json({ error: errorMessage })
-    //  res.status(statusCode).json(error)
+   // res.status(statusCode).json({ error: errorMessage })
+      res.status(statusCode).json(error)
 }
 
 export default errorHandler

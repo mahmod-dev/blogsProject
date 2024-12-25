@@ -13,6 +13,11 @@ const env = cleanEnv(process.env, {
     SMTP_PASSWORD: str(),
     NODE_ENV: str(),
     JWT_SECRET: str(),
+    DB_NAME: str(),
+    DB_USERNAME: str(),
+    DB_PASSWORD: str(),
+    DB_HOST: str(),
+    DB_PORT: port(),
 })
 
 export default env

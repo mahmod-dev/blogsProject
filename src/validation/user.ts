@@ -17,7 +17,7 @@ export const signUpSchema = yup.object({
             username: usernameSchema.required(),
             email: emailSchema.required(),
             password: passwordSchema.required(),
-            verificationCode:  yup.string().required(),
+            verificationCode:  yup.string()
         }
     ),
     file: imageFileSchema
